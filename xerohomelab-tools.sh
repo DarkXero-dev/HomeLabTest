@@ -519,7 +519,7 @@ _xhl_ip=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{print $7; exit}')
 # connection is refused, so any HTTP reply (even the login page) counts as up.
 _xhl_stat() {
     if curl -ksS -o /dev/null --max-time 2 "$1" 2>/dev/null; then
-        printf '\033[0;32m● up\033[0m      '
+        printf '\033[0;32m● up\033[0m   '
     else
         printf '\033[0;33m○ starting\033[0m'
     fi
@@ -584,7 +584,7 @@ show_completion() {
     echo -e "  ${BLUE}•${NC} Host tools: Docker CLI, Networking, Storage/NAS, Backup"
     echo ""
     echo -e "${PURPLE}┌────────────────────────────────────────────────────────────┐${NC}"
-    echo -e "${PURPLE}│${NC}  ${CYAN}PORTAINER — deploy & manage all your containers from a UI${NC}  ${PURPLE}│${NC}"
+    echo -e "${PURPLE}│${NC} ${CYAN}PORTAINER — deploy & manage all your containers from a UI${NC}  ${PURPLE}│${NC}"
     echo -e "${PURPLE}└────────────────────────────────────────────────────────────┘${NC}"
     echo ""
     echo -e "  Portainer is ${YELLOW}NOT running yet${NC} — Docker can't start inside the"
