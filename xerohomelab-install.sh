@@ -1486,7 +1486,7 @@ install_bootloader() {
         "$MOUNTPOINT/etc/default/grub"
 
     # Set distributor and enable os-prober
-    sed -i 's/^GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="XeroLinux"/' "$MOUNTPOINT/etc/default/grub"
+    sed -i 's/^GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="Xero ArchLab"/' "$MOUNTPOINT/etc/default/grub"
     sed -i 's/^#*GRUB_DISABLE_OS_PROBER=.*/GRUB_DISABLE_OS_PROBER=false/' "$MOUNTPOINT/etc/default/grub"
 
     arch-chroot "$MOUNTPOINT" grub-mkconfig -o /boot/grub/grub.cfg

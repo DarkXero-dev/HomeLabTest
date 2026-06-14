@@ -348,12 +348,87 @@ UNIT
 }
 
 # ════════════════════════════════════════════════════════════════════════════════
-# MONITORING — netdata (host package, dashboard on :19999)
+# BESZEL  (lightweight, fully-free/MIT monitoring — hub web UI on :8090)
 # ════════════════════════════════════════════════════════════════════════════════
+# Beszel = a hub (web dashboard) + one agent per monitored host. The agent needs
+# the hub's SSH public KEY, which the hub mints when you click "Add system" in the
+# UI — so the agent can't be auto-registered ahead of time. We auto-start the hub
+# on first boot (like Portainer) and pre-write the agent compose as a ready
+# template: open the hub, add a system, paste the KEY it shows, `compose up`.
 
-install_monitoring() {
-    install_group "Monitoring" netdata
-    enable_if_installed netdata netdata
+BESZEL_DIR="${TARGET_HOME}/homelab/beszel"
+
+write_beszel_stack() {
+    print_step "Writing Beszel compose stack to ${BESZEL_DIR}..."
+    mkdir -p "$BESZEL_DIR"
+
+    # Hub — auto-started on first boot. Web UI on :8090.
+    cat > "${BESZEL_DIR}/docker-compose.yml" << 'COMPOSE'
+# Beszel hub — lightweight server monitoring dashboard (MIT, fully free).
+# Web UI: http://<host>:8090  —  create the admin user on first visit, then
+# "Add system" to register this host (it hands you the agent KEY for agent-compose.yml).
+services:
+  beszel:
+    image: henrygd/beszel:latest
+    container_name: beszel
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    volumes:
+      - ./beszel_data:/beszel_data
+COMPOSE
+
+    # Agent — template. Paste the KEY from the hub UI, then: docker compose -f agent-compose.yml up -d
+    cat > "${BESZEL_DIR}/agent-compose.yml" << 'COMPOSE'
+# Beszel AGENT for THIS host. To enable local-host metrics in the hub:
+#   1. Open the hub (http://<host>:8090), create the admin user.
+#   2. Click "Add system" → it shows an "ssh-ed25519 ..." public key.
+#   3. Paste that whole key into the KEY value below.
+#   4. cd ~/homelab/beszel && docker compose -f agent-compose.yml up -d
+services:
+  beszel-agent:
+    image: henrygd/beszel-agent:latest
+    container_name: beszel-agent
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      LISTEN: 45876
+      KEY: 'PASTE_HUB_PUBLIC_KEY_HERE'
+COMPOSE
+
+    print_success "Beszel stack written (hub auto-starts; agent is a ready template)"
+}
+
+# Docker isn't running in the chroot — bring the hub up on first boot, then disable.
+install_beszel_firstboot() {
+    print_step "Installing Beszel hub first-boot bring-up service..."
+    $SUDO_CMD tee /etc/systemd/system/xerohomelab-beszel.service >/dev/null << UNIT
+[Unit]
+Description=First-boot bring-up of Beszel monitoring hub (XeroHomeLab)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+ConditionPathExists=!/var/lib/xerohomelab-beszel-initialized
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/docker compose -f ${BESZEL_DIR}/docker-compose.yml up -d
+ExecStartPost=/usr/bin/touch /var/lib/xerohomelab-beszel-initialized
+ExecStartPost=/usr/bin/systemctl disable xerohomelab-beszel.service
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+    $SUDO_CMD systemctl enable xerohomelab-beszel.service 2>/dev/null \
+        && print_success "Beszel hub will auto-start on first boot (http://<host>:8090)" \
+        || print_warning "Could not enable Beszel first-boot service"
+
+    if [[ "$IN_CHROOT" == "no" ]]; then
+        $SUDO_CMD systemctl start xerohomelab-beszel.service 2>/dev/null || true
+    fi
 }
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -410,15 +485,38 @@ fi
 printf '\n\033[0;35m╔═══════════════════ XeroHomeLab ═══════════════════╗\033[0m\n'
 printf '  Host IP    : \033[0;36m%s\033[0m\n' "$_xhl_ip"
 printf '  Portainer  : %b\n' "$_xhl_port"
-printf '               \033[0;32mhttps://%s:9443\033[0m  (accept self-signed cert)\n' "$_xhl_ip"
-printf '  netdata    : \033[0;32mhttp://%s:19999\033[0m\n' "$_xhl_ip"
-printf '\033[0;35m╚═══════════════════════════════════════════════════╝\033[0m\n'
-printf '  First visit: create the Portainer admin user (setup window stays open).\n'
-printf '  Check:  docker ps  ·  systemctl status xerohomelab-portainer.service\n\n'
+printf '               \033[0;32mhttps://%s:9443\033[0m\n' "$_xhl_ip"
+printf '  Beszel     : \033[0;32mhttp://%s:8090\033[0m\n' "$_xhl_ip"
+printf '\033[0;35m╚═══════════════════════════════════════════════════╝\033[0m\n\n'
 unset _xhl_ip _xhl_port
 WELCOME
     $SUDO_CMD chmod 644 /etc/profile.d/xerohomelab-welcome.sh
     print_success "Login banner installed (shows on every TTY/SSH login)"
+}
+
+# ── OS branding ──────────────────────────────────────────────────────────────────
+# Make fastfetch / neofetch / login show the distro as "Xero ArchLab".
+# /etc/os-release is normally a symlink → /usr/lib/os-release (owned by the
+# 'filesystem' package). We replace it with a REAL file so our branding survives
+# package upgrades — pacman writes a /etc/os-release.pacnew instead of clobbering.
+# ID stays 'arch' so package tooling, AUR detection and the logo keep working.
+brand_os_release() {
+    print_step "Branding OS as 'Xero ArchLab'..."
+    $SUDO_CMD rm -f /etc/os-release
+    $SUDO_CMD tee /etc/os-release >/dev/null << 'OSREL'
+NAME="Xero ArchLab"
+PRETTY_NAME="Xero ArchLab"
+ID=archlab
+ID_LIKE=arch
+BUILD_ID=rolling
+ANSI_COLOR="38;2;23;147;209"
+HOME_URL="https://github.com/DarkXero-dev/HomeLabTest"
+SUPPORT_URL="https://github.com/DarkXero-dev/HomeLabTest/issues"
+BUG_REPORT_URL="https://github.com/DarkXero-dev/HomeLabTest/issues"
+LOGO=archlinux-logo
+OSREL
+    $SUDO_CMD chmod 644 /etc/os-release
+    print_success "os-release branded — fastfetch will show 'Xero ArchLab'"
 }
 
 # ── Finalize / completion ────────────────────────────────────────────────────────
@@ -429,6 +527,7 @@ finalize_system() {
     if [[ "$FILESYSTEM" == "btrfs" ]]; then
         install_group "Btrfs Tools" btrfs-assistant snapper snap-pac
     fi
+    brand_os_release
     install_welcome_motd
     print_success "Done."
 }
@@ -438,7 +537,7 @@ show_completion() {
     echo -e "${GREEN}✨ XeroHomeLab tooling installation complete! ✨${NC}"
     echo ""
     echo -e "  ${BLUE}•${NC} Docker engine + compose + buildx installed; ${GREEN}${TARGET_USER}${NC} in docker group"
-    echo -e "  ${BLUE}•${NC} netdata metrics → ${GREEN}http://<host-ip>:19999${NC}"
+    echo -e "  ${BLUE}•${NC} Beszel monitoring → ${GREEN}http://<host-ip>:8090${NC} (add this host via its UI)"
     echo -e "  ${BLUE}•${NC} Host tools: Docker CLI, Networking, Storage/NAS, Backup"
     echo ""
     echo -e "${PURPLE}┌────────────────────────────────────────────────────────────┐${NC}"
@@ -487,8 +586,9 @@ main() {
     install_portainer_firstboot
     install_portainer_setup_keepalive
 
-    # Monitoring
-    install_monitoring
+    # Monitoring — Beszel (free/MIT)
+    write_beszel_stack
+    install_beszel_firstboot
 
     # Selected optional host groups
     install_docker_cli

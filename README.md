@@ -13,7 +13,7 @@ Three stages, same flow as the upstream Xero Arch Installer:
 |-------|------|---------|------|
 | 1. Bootstrap | `install.sh` | live ISO, root | preflight, deps, fetch + launch stage 2 |
 | 2. Base install | `xerohomelab-install.sh` | live ISO, root | gum TUI: disk/snapper/GRUB/user — **no DE choice, no AUR helper, no encryption** |
-| 3. Tooling | `xerohomelab-tools.sh` | target chroot, user | docker stack + Portainer + netdata + host tools |
+| 3. Tooling | `xerohomelab-tools.sh` | target chroot, user | docker stack + Portainer + Beszel + host tools |
 
 Stage 2 chroots into the new system and runs stage 3 as the created user with
 temporary passwordless sudo, passing `<filesystem>` as `$1`.
@@ -57,7 +57,10 @@ packages (orca, onboard, xf86-input-*, etc.).
 - **Portainer**: compose stack written to `~/homelab/portainer/`, auto-started on
   **first boot** via a oneshot systemd unit → `https://<host>:9443`. Deploy all
   other apps (Jellyfin, *arr, Vaultwarden, …) from its web UI.
-- **netdata**: host metrics dashboard on `:19999`.
+- **Beszel**: lightweight, fully-free/MIT monitoring. Hub auto-started on first
+  boot → `http://<host>:8090`. The agent compose is pre-written as a template in
+  `~/homelab/beszel/agent-compose.yml` — open the hub, "Add system", paste the KEY
+  it shows, then `docker compose -f agent-compose.yml up -d` to register this host.
 - **Host groups**: Docker TUI/CLI (lazydocker, ctop, dive) · Networking (tailscale,
   cloudflared, wireguard-tools) · Storage/NAS (smartmontools, nfs-utils, samba,
   mergerfs, hdparm) · Backup (restic, rclone, borg).
@@ -77,7 +80,7 @@ packages (orca, onboard, xf86-input-*, etc.).
 The box boots to a TTY, so first-boot bring-up is silent. A login banner
 (`/etc/profile.d/xerohomelab-welcome.sh`) prints on **every TTY/SSH login** with
 the live host IP, Portainer running/not-running status, and the Portainer
-(`https://<ip>:9443`) + netdata (`http://<ip>:19999`) URLs.
+(`https://<ip>:9443`) + Beszel (`http://<ip>:8090`) URLs.
 
 ## Customization
 
