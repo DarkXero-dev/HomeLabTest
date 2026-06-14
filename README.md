@@ -65,6 +65,19 @@ packages (orca, onboard, xf86-input-*, etc.).
 > Docker isn't running inside the chroot, so Portainer can't be brought up during
 > install — the first-boot unit handles it once `docker.service` is live, then
 > disables itself.
+>
+> Portainer locks its initial admin-creation page ~5 min after the container
+> starts. On a headless box you rarely reach the UI that fast, so a timer
+> (`xerohomelab-portainer-setup.timer`) restarts Portainer every 3 min **while no
+> admin exists**, keeping the setup window open — and self-disables the moment you
+> create the admin (checked via `GET /api/users/admin/check`). No credentials stored.
+
+### Headless visibility
+
+The box boots to a TTY, so first-boot bring-up is silent. A login banner
+(`/etc/profile.d/xerohomelab-welcome.sh`) prints on **every TTY/SSH login** with
+the live host IP, Portainer running/not-running status, and the Portainer
+(`https://<ip>:9443`) + netdata (`http://<ip>:19999`) URLs.
 
 ## Customization
 
