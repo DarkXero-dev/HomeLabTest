@@ -217,6 +217,10 @@ setup_docker() {
     # Enable the daemon so it starts on boot.
     enable_if_installed docker docker.service
 
+    # Make network-online.target actually WAIT for connectivity, otherwise the
+    # first-boot compose units race ahead of DHCP and image pulls fail.
+    enable_if_installed networkmanager NetworkManager-wait-online.service
+
     # If we are on a live system (not a bare chroot), start it now too.
     if [[ "$IN_CHROOT" == "no" ]]; then
         $SUDO_CMD systemctl start docker.service 2>/dev/null \
@@ -225,6 +229,46 @@ setup_docker() {
     else
         print_step "Chroot detected — docker.service will start on first boot"
     fi
+}
+
+# ════════════════════════════════════════════════════════════════════════════════
+# FIRST-BOOT COMPOSE BRING-UP HELPER
+# ════════════════════════════════════════════════════════════════════════════════
+# Docker isn't running in the chroot, so all stacks come up on first boot. A plain
+# oneshot `docker compose up -d` races the daemon and the network: if dockerd isn't
+# ready yet or DHCP hasn't leased, the image pull fails and the stack never starts.
+# This wrapper waits for the daemon, retries the pull, and only marks the unit done
+# (flag file + self-disable) on SUCCESS — so a transient failure retries next boot.
+#   usage: xerohomelab-compose-up <unit-name> <compose-file> <done-flag>
+install_compose_helper() {
+    print_step "Installing first-boot compose bring-up helper..."
+    $SUDO_CMD tee /usr/local/bin/xerohomelab-compose-up >/dev/null << 'HELPER'
+#!/bin/sh
+# Robust first-boot bring-up of a docker compose stack.
+unit="$1"; file="$2"; flag="$3"
+[ -n "$unit" ] && [ -n "$file" ] && [ -n "$flag" ] || { echo "usage: $0 <unit> <compose-file> <flag>" >&2; exit 2; }
+
+# Wait up to ~2 min for the docker daemon to accept connections.
+i=0
+while ! docker info >/dev/null 2>&1; do
+    i=$((i + 1)); [ "$i" -ge 60 ] && { echo "docker daemon not ready" >&2; exit 1; }
+    sleep 2
+done
+
+# Bring the stack up, retrying to ride out slow/transient image pulls.
+n=0
+until docker compose -f "$file" up -d; do
+    n=$((n + 1)); [ "$n" -ge 5 ] && { echo "compose up failed after $n tries" >&2; exit 1; }
+    echo "compose up failed (try $n) — retrying in 15s" >&2
+    sleep 15
+done
+
+# Success — don't run again.
+touch "$flag"
+systemctl disable "$unit"
+HELPER
+    $SUDO_CMD chmod 755 /usr/local/bin/xerohomelab-compose-up
+    print_success "Bring-up helper installed"
 }
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -274,9 +318,7 @@ ConditionPathExists=!/var/lib/xerohomelab-portainer-initialized
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/usr/bin/docker compose -f ${PORTAINER_DIR}/docker-compose.yml up -d
-ExecStartPost=/usr/bin/touch /var/lib/xerohomelab-portainer-initialized
-ExecStartPost=/usr/bin/systemctl disable xerohomelab-portainer.service
+ExecStart=/usr/local/bin/xerohomelab-compose-up xerohomelab-portainer.service ${PORTAINER_DIR}/docker-compose.yml /var/lib/xerohomelab-portainer-initialized
 
 [Install]
 WantedBy=multi-user.target
@@ -415,9 +457,7 @@ ConditionPathExists=!/var/lib/xerohomelab-beszel-initialized
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/usr/bin/docker compose -f ${BESZEL_DIR}/docker-compose.yml up -d
-ExecStartPost=/usr/bin/touch /var/lib/xerohomelab-beszel-initialized
-ExecStartPost=/usr/bin/systemctl disable xerohomelab-beszel.service
+ExecStart=/usr/local/bin/xerohomelab-compose-up xerohomelab-beszel.service ${BESZEL_DIR}/docker-compose.yml /var/lib/xerohomelab-beszel-initialized
 
 [Install]
 WantedBy=multi-user.target
@@ -582,6 +622,7 @@ main() {
 
     # Docker core (always) + Portainer
     setup_docker
+    install_compose_helper
     write_portainer_stack
     install_portainer_firstboot
     install_portainer_setup_keepalive
