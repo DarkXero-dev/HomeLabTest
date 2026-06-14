@@ -27,7 +27,7 @@ otherwise need the AUR (lazydocker, ctop, cloudflared, mergerfs, …).
 Boot the Arch live ISO and run:
 
 ```bash
-sudo bash <(curl -fsSL https://xerolinux.xyz/script/xerohomelab/install.sh)
+sudo bash <(curl -fsSL https://raw.githubusercontent.com/DarkXero-dev/HomeLabTest/main/install.sh)
 ```
 
 ## What Gets Installed

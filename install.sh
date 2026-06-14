@@ -1,8 +1,8 @@
 #!/bin/bash
 #
 # XeroHomeLab Installer - Quick Launch Script
-# Run with: curl -fsSL https://xerolinux.xyz/script/xerohomelab/install.sh | bash
-# Or:       bash <(curl -fsSL https://xero.link/lab)
+# Run with: curl -fsSL https://raw.githubusercontent.com/DarkXero-dev/HomeLabTest/main/install.sh | bash
+# Repo:     https://github.com/DarkXero-dev/HomeLabTest
 
 set +e
 
@@ -31,7 +31,7 @@ if [[ $EUID -ne 0 ]]; then
     echo -e "${RED}Error: This script must be run as root${NC}"
     echo ""
     echo "Please run:"
-    echo -e "  ${CYAN}sudo bash <(curl -fsSL https://xerolinux.xyz/script/xerohomelab/install.sh)${NC}"
+    echo -e "  ${CYAN}sudo bash <(curl -fsSL https://raw.githubusercontent.com/DarkXero-dev/HomeLabTest/main/install.sh)${NC}"
     exit 1
 fi
 
@@ -62,7 +62,7 @@ trap 'rm -rf "$INSTALL_DIR"' EXIT
 cd "$INSTALL_DIR"
 
 echo -e "${CYAN}Downloading XeroHomeLab Installer...${NC}"
-INSTALLER_URL="https://xerolinux.xyz/script/xerohomelab/xerohomelab-install.sh"
+INSTALLER_URL="https://raw.githubusercontent.com/DarkXero-dev/HomeLabTest/main/xerohomelab-install.sh"
 curl -fsSL "$INSTALLER_URL" -o xerohomelab-install.sh
 if [[ ! -s xerohomelab-install.sh ]]; then
     echo -e "${RED}Error: Failed to download installer (empty file)${NC}"
@@ -74,7 +74,7 @@ echo -e "${GREEN}✓ Installer downloaded${NC}"
 # ── Download HomeLab Tooling Script ─────────────────────────────────────────────
 # Failure is non-fatal — the main installer will re-fetch if needed
 echo -e "${CYAN}Downloading XeroHomeLab tooling script...${NC}"
-TOOLS_URL="https://xerolinux.xyz/script/xerohomelab/xerohomelab-tools.sh"
+TOOLS_URL="https://raw.githubusercontent.com/DarkXero-dev/HomeLabTest/main/xerohomelab-tools.sh"
 curl -fsSL "$TOOLS_URL" -o /root/xerohomelab-tools.sh 2>/dev/null || {
     echo -e "${CYAN}Note: tooling script will be downloaded during installation${NC}"
 }

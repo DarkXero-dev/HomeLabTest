@@ -22,7 +22,7 @@ VERSION="0.1"
 SCRIPT_NAME="XeroHomeLab Installer"
 
 # URL for fetching the HomeLab tooling stage script (runs in chroot, post-base)
-XERO_TOOLS_URL="https://xerolinux.xyz/script/xerohomelab/xerohomelab-tools.sh"
+XERO_TOOLS_URL="https://raw.githubusercontent.com/DarkXero-dev/HomeLabTest/main/xerohomelab-tools.sh"
 
 # Mountpoint for installation
 MOUNTPOINT="/mnt"
