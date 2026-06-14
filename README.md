@@ -1,116 +1,45 @@
-# ✨ XeroHomeLab Installer v0.1
+# XeroHomeLab Installer
 
-A headless Arch Linux installer for HomeLab / server boxes. Installs a clean Arch
-base and a **curated HomeLab toolset** — **no desktop environment, no window
-manager, no display server**. Forked from the XeroLinux Arch Installer with all
-DE/WM logic stripped out.
-
-## Architecture
-
-Three stages, same flow as the upstream Xero Arch Installer:
-
-| Stage | File | Context | Role |
-|-------|------|---------|------|
-| 1. Bootstrap | `install.sh` | live ISO, root | preflight, deps, fetch + launch stage 2 |
-| 2. Base install | `xerohomelab-install.sh` | live ISO, root | gum TUI: disk/snapper/GRUB/user — **no DE choice, no AUR helper, no encryption** |
-| 3. Tooling | `xerohomelab-tools.sh` | target chroot, user | docker stack + Portainer + Beszel + host tools |
-
-Stage 2 chroots into the new system and runs stage 3 as the created user with
-temporary passwordless sudo, passing `<filesystem>` as `$1`.
-
-**No AUR helper (paru/yay).** Stage 2 enables the **xerolinux** and **chaotic-aur**
-binary repos, so plain `pacman` installs every tool — including ones that would
-otherwise need the AUR (lazydocker, ctop, cloudflared, mergerfs, …).
+A headless Arch Linux installer for HomeLab and server boxes. Installs a clean
+Arch base plus a curated set of HomeLab tools. No desktop, no window manager, no GUI.
 
 ## Quick Start
 
 Boot the Arch live ISO and run:
 
 ```bash
-sudo bash <(curl -fsSL https://raw.githubusercontent.com/DarkXero-dev/HomeLabTest/main/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/DarkXero-dev/HomeLabTest/main/install.sh)
 ```
 
-## What Gets Installed
+## What You Get
 
-### Base System (stage 2)
+**Base system**
 
-- Linux kernel + headers, optional extra kernels (CachyOS / LTS)
-- GRUB bootloader
-- BTRFS / EXT4 / XFS (no disk encryption — removed for headless lab use)
-- Snapper + grub-btrfs (BTRFS), ZRAM or swapfile
-- **mesa only** (console/VAAPI/container GPU accel) + auto VM guest agents — no
-  display server, no GPU driver menu
-- NetworkManager + openssh + dhcpcd + wifi essentials, **xerolinux + chaotic-aur** repos
-- User account, locale, timezone, hostname
+- Arch base, Linux kernel (optional CachyOS / LTS kernels)
+- GRUB bootloader, BTRFS / EXT4 / XFS (no disk encryption)
+- Snapper snapshots on BTRFS, ZRAM or swapfile
+- NetworkManager, SSH, WiFi support
+- xerolinux + chaotic-aur repos (no AUR helper needed)
 
-**Headless base** — the desktop package set inherited from the upstream installer
-was stripped: no Xorg/Wayland, no PipeWire/ALSA/GStreamer, no CUPS/printing/scanning,
-no Bluetooth, no legacy dialup/VPN clients, and no auto-installed "optional" GUI
-packages (orca, onboard, xf86-input-*, etc.).
+**HomeLab tools**
 
-### HomeLab Tooling (stage 3)
+- Docker, docker-compose, buildx (your user is added to the docker group)
+- Portainer for managing all your containers, at `https://<host-ip>:9443`
+- Beszel for monitoring, at `http://<host-ip>:8090` (free, lightweight)
+- CLI tools: lazydocker, ctop, dive
+- Networking: tailscale, cloudflared, wireguard
+- Storage: smartmontools, nfs-utils, samba, mergerfs
+- Backup: restic, rclone, borg
 
-- **Baseline** (always): vim, git, tmux, htop/btop, openssh (enabled), rsync, zsh,
-  fastfetch + utils (jq, yq, fzf, ripgrep, fd, bat, eza, ncdu, tree, lsof, age, sops)
-- **Docker core** (always): `docker` + `docker-compose` + `docker-buildx` +
-  `containerd`. User added to `docker` group; `docker.service` enabled.
-- **Portainer**: compose stack written to `~/homelab/portainer/`, auto-started on
-  **first boot** via a oneshot systemd unit → `https://<host>:9443`. Deploy all
-  other apps (Jellyfin, *arr, Vaultwarden, …) from its web UI.
-- **Beszel**: lightweight, fully-free/MIT monitoring. Hub auto-started on first
-  boot → `http://<host>:8090`. The agent compose is pre-written as a template in
-  `~/homelab/beszel/agent-compose.yml` — open the hub, "Add system", paste the KEY
-  it shows, then `docker compose -f agent-compose.yml up -d` to register this host.
-- **Host groups**: Docker TUI/CLI (lazydocker, ctop, dive) · Networking (tailscale,
-  cloudflared, wireguard-tools) · Storage/NAS (smartmontools, nfs-utils, samba,
-  mergerfs, hdparm) · Backup (restic, rclone, borg).
+## First Boot
 
-> Docker isn't running inside the chroot, so Portainer can't be brought up during
-> install — the first-boot unit handles it once `docker.service` is live, then
-> disables itself.
->
-> Portainer locks its initial admin-creation page ~5 min after the container
-> starts. On a headless box you rarely reach the UI that fast, so a timer
-> (`xerohomelab-portainer-setup.timer`) restarts Portainer every 3 min **while no
-> admin exists**, keeping the setup window open — and self-disables the moment you
-> create the admin (checked via `GET /api/users/admin/check`). No credentials stored.
+Portainer and Beszel start automatically on the first boot. The box is headless,
+so log in on the TTY or over SSH and a banner shows the live IP and both URLs.
 
-### Headless visibility
-
-The box boots to a TTY, so first-boot bring-up is silent. A login banner
-(`/etc/profile.d/xerohomelab-welcome.sh`) prints on **every TTY/SSH login** with
-the live host IP, Portainer running/not-running status, and the Portainer
-(`https://<ip>:9443`) + Beszel (`http://<ip>:8090`) URLs.
-
-## Customization
-
-Edit `xerohomelab-tools.sh`:
-
-- Add a host-package group: write an `install_<name>()` calling
-  `install_group "<Label>" pkg1 pkg2 …`, then call it from `main()`.
-- Enable a daemon: `enable_if_installed <pkg> [<unit>]`.
-- Ship more compose stacks: follow the `write_portainer_stack` /
-  `install_portainer_firstboot` pattern (write to `~/homelab/<app>/`, first-boot
-  unit brings it up). Or just deploy via the Portainer UI post-boot.
-
-## Differences from the upstream Xero Arch Installer
-
-- No `select_desktop_env`, no KDE/Hyprland scripts, no `CONFIG[desktop]`.
-- No AUR helper: `select_aur_helper` / `CONFIG[aur_helper]` removed; chaotic-aur
-  binary repo covers former-AUR packages via pacman.
-- No disk encryption: all LUKS2 logic (`setup_encryption`, encrypt prompts,
-  crypttab/cryptdevice, sd-encrypt hook, GRUB cryptodisk) removed. Partitioning
-  collapsed to the plain 2-partition layout (boot + root) for UEFI and BIOS.
-- No GPU driver menu / `select_graphics_driver` / `CONFIG[gfx_driver]`: graphics
-  reduced to mesa + VM guest agents.
-- Desktop base packages stripped (Xorg, audio, gstreamer, printing, bluetooth,
-  legacy networking) + X11/Wayland keyboard config removed (console keymap only).
-- Main menu trimmed: Desktop Environment, AUR Helper, and Graphics Driver items
-  gone. Final menu: 1 Lang · 2 Locales · 3 Disk · 4 Swap · 5 Hostname ·
-  6 Authentication · 7 Timezone · 8 Parallel Downloads · 9 Additional Kernel ·
-  10 Start.
-- DE chroot stage replaced by the HomeLab tooling stage.
+1. Open `https://<host-ip>:9443` and create your Portainer admin user.
+2. Deploy any other apps (Jellyfin, *arr, Vaultwarden, etc.) from the Portainer UI.
+3. Open `http://<host-ip>:8090` to set up Beszel monitoring.
 
 ## License
 
-GPL-3.0 — see [LICENSE](LICENSE).
+GPL-3.0, see [LICENSE](LICENSE).

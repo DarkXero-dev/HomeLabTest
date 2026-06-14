@@ -514,21 +514,24 @@ _xhl_ip=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{print $7; exit}')
 [ -z "$_xhl_ip" ] && _xhl_ip=$(hostname -I 2>/dev/null | awk '{print $1}')
 [ -z "$_xhl_ip" ] && _xhl_ip="<host-ip>"
 
-if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx portainer; then
-    _xhl_port="\033[0;32m● running\033[0m"
-elif docker info >/dev/null 2>&1; then
-    _xhl_port="\033[0;33m○ not running\033[0m → sudo systemctl start xerohomelab-portainer.service"
-else
-    _xhl_port="\033[0;33m? need docker access\033[0m → re-login, or: sudo docker ps"
-fi
+# Live status: probe the actual port at login (no docker-group dependency, and
+# always reflects the real state right now). curl exits non-zero only when the
+# connection is refused, so any HTTP reply (even the login page) counts as up.
+_xhl_stat() {
+    if curl -ksS -o /dev/null --max-time 2 "$1" 2>/dev/null; then
+        printf '\033[0;32m● up\033[0m      '
+    else
+        printf '\033[0;33m○ starting\033[0m'
+    fi
+}
 
 printf '\n\033[0;35m╔═══════════════════ XeroHomeLab ═══════════════════╗\033[0m\n'
 printf '  Host IP    : \033[0;36m%s\033[0m\n' "$_xhl_ip"
-printf '  Portainer  : %b\n' "$_xhl_port"
-printf '               \033[0;32mhttps://%s:9443\033[0m\n' "$_xhl_ip"
-printf '  Beszel     : \033[0;32mhttp://%s:8090\033[0m\n' "$_xhl_ip"
+printf '  Portainer  : %b  \033[0;32mhttps://%s:9443\033[0m\n' "$(_xhl_stat https://localhost:9443)" "$_xhl_ip"
+printf '  Beszel     : %b  \033[0;32mhttp://%s:8090\033[0m\n'  "$(_xhl_stat http://localhost:8090)" "$_xhl_ip"
 printf '\033[0;35m╚═══════════════════════════════════════════════════╝\033[0m\n\n'
-unset _xhl_ip _xhl_port
+unset _xhl_ip
+unset -f _xhl_stat 2>/dev/null || true
 WELCOME
     $SUDO_CMD chmod 644 /etc/profile.d/xerohomelab-welcome.sh
     print_success "Login banner installed (shows on every TTY/SSH login)"
